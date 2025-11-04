@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>OCR للخط الخاص</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h2> OCR للخط الخاص بك </h2>
+    <form id="uploadForm">
+      <input type="file" id="fileInput" accept="image/*" required>
+      <button type="submit">رفع الصورة</button>
+    </form>
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const form = document.getElementById("uploadForm");
+    const resultDiv = document.getElementById("result");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const fileInput = document.getElementById("fileInput");
+      const formData = new FormData();
+      formData.append("file", fileInput.files[0]);
+
+      const response = await fetch("http://127.0.0.1:5000/predict", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await response.json();
+      resultDiv.innerHTML = `<p>${data.result}</p>`;
+    });
+  </script>
+</body>
+</html>
