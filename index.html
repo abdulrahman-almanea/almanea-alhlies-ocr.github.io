@@ -1,38 +1,139 @@
 <!DOCTYPE html>
-<html lang="ar">
+<html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <title>OCR للخط الخاص</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <title>نظام التعرف على الحروف العربية</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="container">
-    <h2> OCR للخط الخاص بك </h2>
-    <form id="uploadForm">
-      <input type="file" id="fileInput" accept="image/*" required>
-      <button type="submit">رفع الصورة</button>
-    </form>
-    <div id="result"></div>
-  </div>
+    <div class="container">
+        <h1>نظام التعرف على الحروف العربية</h1>
+        <p>قم برفع صورة للحرف للتعرف عليه</p>
+        
+        <form id="uploadForm" enctype="multipart/form-data">
+            <div class="file-input-container">
+                <input type="file" id="fileInput" accept="image/*" required>
+                <label for="fileInput" class="file-label">اختر صورة</label>
+            </div>
+            <button type="submit" class="submit-btn">تعرف على الحرف</button>
+        </form>
+        
+        <div id="previewContainer" class="preview-container" style="display: none;">
+            <h3>معاينة الصورة:</h3>
+            <img id="imagePreview" class="preview-image">
+        </div>
+        
+        <div id="results" class="results-container"></div>
+        
+        <!-- ⬇️ قسم تشغيل الصوت المضاف -->
+        <div id="audioSection" style="display: none; text-align: center; margin-top: 20px;">
+            <button id="playSoundBtn" class="play-btn">🔊 تشغيل نطق الحرف</button>
+            <audio id="letterAudio" preload="none"></audio>
+        </div>
+        
+        <div class="info">
+            <h3>تعليمات:</h3>
+            <ul>
+                <li>استخدم صور واضحة للحروف</li>
+                <li>يفضل أن تكون الخلفية بيضاء والحرف أسود</li>
+                <li>الصيغ المدعومة: PNG, JPG, JPEG</li>
+                <li>يمكنك سماع نطق الحرف بعد التعرف عليه</li>
+            </ul>
+        </div>
+    </div>
 
-  <script>
-    const form = document.getElementById("uploadForm");
-    const resultDiv = document.getElementById("result");
+    <script>
+        const form = document.getElementById("uploadForm");
+        const fileInput = document.getElementById("fileInput");
+        const resultsDiv = document.getElementById("results");
+        const previewContainer = document.getElementById("previewContainer");
+        const imagePreview = document.getElementById("imagePreview");
+        const audioSection = document.getElementById("audioSection");
+        const playSoundBtn = document.getElementById("playSoundBtn");
+        const letterAudio = document.getElementById("letterAudio");
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const fileInput = document.getElementById("fileInput");
-      const formData = new FormData();
-      formData.append("file", fileInput.files[0]);
+        // معاينة الصورة
+        fileInput.addEventListener("change", function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    imagePreview.src = e.target.result;
+                    previewContainer.style.display = 'block';
+                }
+                reader.readAsDataURL(file);
+            }
+        });
 
-      const response = await fetch("http://127.0.0.1:5000/predict", {
-        method: "POST",
-        body: formData
-      });
+        // زر تشغيل الصوت
+        playSoundBtn.addEventListener("click", function() {
+            letterAudio.play().catch(e => {
+                console.error("خطأ في تشغيل الصوت:", e);
+                showResult("❌ تعذر تشغيل الصوت", "error");
+            });
+        });
 
-      const data = await response.json();
-      resultDiv.innerHTML = `<p>${data.result}</p>`;
-    });
-  </script>
+        form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    
+    const file = fileInput.files[0];
+    if (!file) {
+        showResult("❌ يرجى اختيار صورة أولاً", "error");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    showResult("⏳ جاري معالجة الصورة...", "loading");
+    audioSection.style.display = 'none';
+
+    try {
+        const response = await fetch("http://127.0.0.1:5000/predict", {
+            method: "POST",
+            body: formData
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            showResult(data.message, "success");
+            
+            // ⬇️ استخدام اسم الملف من الاستجابة بدلاً من افتراض sound.mp3
+            if (data.letter && data.sound_file) {
+                const audioPath = `sounds/${data.letter}/${data.sound_file}`;
+                letterAudio.src = audioPath;
+                
+                letterAudio.load();
+                letterAudio.oncanplaythrough = () => {
+                    audioSection.style.display = 'block';
+                    playSoundBtn.textContent = `🔊 تشغيل نطق الحرف (${data.letter})`;
+                };
+                letterAudio.onerror = () => {
+                    console.warn("⚠️ لم يتم العثور على ملف الصوت:", audioPath);
+                    audioSection.style.display = 'none';
+                };
+            } else {
+                audioSection.style.display = 'none';
+                console.warn("⚠️ لا يوجد ملف صوتي للحرف:", data.letter);
+            }
+        } else {
+            showResult(data.error, "error");
+            audioSection.style.display = 'none';
+        }
+    } catch (error) {
+        showResult("❌ حدث خطأ في الاتصال بالخادم. تأكد من تشغيل السيرفر.", "error");
+        audioSection.style.display = 'none';
+        console.error("خطأ:", error);
+    }
+});
+        function showResult(message, type) {
+            resultsDiv.innerHTML = `
+                <div class="result ${type}">
+                    ${message}
+                </div>
+            `;
+        }
+    </script>
 </body>
 </html>
